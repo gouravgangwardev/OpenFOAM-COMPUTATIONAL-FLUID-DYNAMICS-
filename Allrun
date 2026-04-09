@@ -1,0 +1,88 @@
+#!/bin/bash
+# =============================================================================
+# Allrun — buoyantPimpleFoam Transient Square Cylinder
+# =============================================================================
+# Strategy:
+#   1. (Optional) Copy latest steady-state solution as initial condition
+#   2. Run blockMesh if mesh doesn't exist
+#   3. Launch buoyantPimpleFoam in parallel or serial
+#   4. Post-process with FFT script
+#
+# Usage:
+#   Serial:   ./Allrun
+#   Parallel: ./Allrun --parallel 4
+# =============================================================================
+
+cd "$(dirname "$0")" || exit 1
+. "$WM_PROJECT_DIR/bin/tools/RunFunctions" 2>/dev/null || {
+    echo "ERROR: OpenFOAM environment not sourced. Run: source /opt/openfoam*/etc/bashrc"
+    exit 1
+}
+
+NP=1
+while [[ "$#" -gt 0 ]]; do
+    case $1 in
+        --parallel) NP="$2"; shift;;
+    esac
+    shift
+done
+
+echo "========================================"
+echo "  buoyantPimpleFoam Transient Run"
+echo "  OpenFOAM $(foamVersion 2>/dev/null || echo 'version unknown')"
+echo "  Cores: $NP"
+echo "========================================"
+
+# ── Step 1: Mesh ─────────────────────────────────────────────────────────────
+if [ ! -d "constant/polyMesh/sets" ] && [ ! -f "constant/polyMesh/points" ]; then
+    echo "[1/4] Running blockMesh..."
+    runApplication blockMesh
+else
+    echo "[1/4] Mesh already present — skipping blockMesh."
+fi
+
+# ── Step 2: Initial Condition ─────────────────────────────────────────────────
+# Prefer to start from converged steady solution (latestTime in controlDict).
+# If no time directories exist beyond 0, print a warning.
+LATEST=$(foamListTimes -withZero 2>/dev/null | tail -1)
+if [ "$LATEST" = "0" ] || [ -z "$LATEST" ]; then
+    echo ""
+    echo "  WARNING: No steady-state initial condition found."
+    echo "  Starting from t=0 (cold start). This increases spin-up time."
+    echo "  Recommended: copy your converged buoyantSimpleFoam solution"
+    echo "  time directory here before running."
+    echo ""
+fi
+echo "[2/4] Starting from: t = ${LATEST:-0}"
+
+# ── Step 3: Run Solver ────────────────────────────────────────────────────────
+if [ "$NP" -gt 1 ]; then
+    echo "[3/4] Decomposing domain for $NP cores..."
+    runApplication decomposePar -force
+    echo "[3/4] Running buoyantPimpleFoam in parallel..."
+    runParallel buoyantPimpleFoam
+    echo "[3/4] Reconstructing..."
+    runApplication reconstructPar
+else
+    echo "[3/4] Running buoyantPimpleFoam (serial)..."
+    runApplication buoyantPimpleFoam
+fi
+
+# ── Step 4: Post-Process ──────────────────────────────────────────────────────
+echo "[4/4] Running FFT post-processing..."
+if command -v python3 &>/dev/null; then
+    python3 post_process_shedding.py --case_dir . --spinup_cycles 3
+    echo "  FFT analysis complete. See postProcessing/FFT_analysis/"
+else
+    echo "  python3 not found — skipping FFT. Run manually:"
+    echo "  python3 post_process_shedding.py --case_dir ."
+fi
+
+echo ""
+echo "========================================"
+echo "  Run complete."
+echo "  Key outputs:"
+echo "    postProcessing/forceCoeffs/0/  — Cl(t), Cd(t)"
+echo "    postProcessing/FFT_analysis/   — St, plots, CSV"
+echo "    postProcessing/fieldAverage/   — Time-mean U, T, p_rgh"
+echo "========================================"

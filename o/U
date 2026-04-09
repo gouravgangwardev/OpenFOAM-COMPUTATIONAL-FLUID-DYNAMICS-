@@ -1,0 +1,61 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+  =========                 |
+  \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox
+   \\    /   O peration     | Version:  v2306
+    \\  /    A nd           | Web:      www.OpenFOAM.com
+     \\/     M anipulation  |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       volVectorField;
+    location    "0";
+    object      U;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+// Inlet velocity calculation:
+// Re = U*D/nu
+// U  = Re * nu / D = 100 * 1.6e-5 / 1 = 1.6e-3 m/s
+// (Approximately 1.6 mm/s for Re=100, D=1m, nu_air = 1.6e-5 m2/s)
+
+dimensions      [0 1 -1 0 0 0 0];
+
+internalField   uniform (1.6e-3 0 0);
+
+boundaryField
+{
+    inlet
+    {
+        type            fixedValue;
+        value           uniform (1.6e-3 0 0);
+    }
+
+    outlet
+    {
+        type            zeroGradient;
+    }
+
+    cylinder
+    {
+        type            noSlip;
+    }
+
+    top
+    {
+        type            symmetryPlane;
+    }
+
+    bottom
+    {
+        type            symmetryPlane;
+    }
+
+    frontAndBack
+    {
+        type            empty;
+    }
+}
+
+// ************************************************************************* //

@@ -1,0 +1,77 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+  =========                 |
+  \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox
+   \\    /   O peration     | Version:  v2306
+    \\  /    A nd           | Web:      www.OpenFOAM.com
+     \\/     M anipulation  |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       volScalarField;
+    location    "0";
+    object      T;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+// Temperature boundary conditions
+// Inlet: T_inf = 300 K (ambient / freestream)
+//
+// Cylinder wall heat flux condition using fixedGradient:
+//   -k * (dT/dn) = q   =>   dT/dn = -q/k
+//   Here n points outward from the fluid domain (into the wall)
+//   OpenFOAM fixedGradient applies: dT/dn_outward = gradient
+//
+// For Case 1: q = 100 W/m2
+//   gradient = q / k = 100 / 0.026 = 3846.15 K/m
+//   (Heat flux is INTO the fluid, so gradient sign is positive outward from wall)
+//
+// Note: buoyantSimpleFoam's energy equation uses sensibleEnthalpy (h)
+//       T is derived from h. The fixedGradient on T is physically consistent
+//       for the conduction boundary condition.
+
+dimensions      [0 0 0 1 0 0 0];
+
+internalField   uniform 300;
+
+boundaryField
+{
+    inlet
+    {
+        type            fixedValue;
+        value           uniform 300;
+    }
+
+    outlet
+    {
+        type            inletOutlet;
+        inletValue      uniform 300;
+        value           uniform 300;
+    }
+
+    cylinder
+    {
+        // q = 100 W/m2, k = 0.026 W/m/K
+        // gradient = q/k = 3846.15 K/m (heat into fluid)
+        type            fixedGradient;
+        gradient        uniform -3846.15;
+    }
+
+    top
+    {
+        type            zeroGradient;
+    }
+
+    bottom
+    {
+        type            zeroGradient;
+    }
+
+    frontAndBack
+    {
+        type            empty;
+    }
+}
+
+// ************************************************************************* //

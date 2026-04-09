@@ -1,0 +1,161 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+  =========                 |
+  \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox
+   \\    /   O peration     | Version:  v2306
+    \\  /    A nd           | Web:      www.OpenFOAM.com
+     \\/     M anipulation  |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "system";
+    object      fvSolution;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+// ─────────────────────────────────────────────────────────────────────────────
+// LINEAR SOLVERS
+//
+// p_rghFinal uses tighter tolerance than intermediate PIMPLE iterations.
+// This two-tier approach (relTol=0.05 for inner, relTol=0 for final)
+// reduces expensive GAMG iterations during outer correctors while
+// ensuring tight convergence at the end of each time step.
+// ─────────────────────────────────────────────────────────────────────────────
+
+solvers
+{
+    p_rgh
+    {
+        solver          GAMG;
+        smoother        GaussSeidel;
+        nCellsInCoarsestLevel 20;
+        tolerance       1e-7;
+        relTol          0.05;           // Looser for intermediate PIMPLE iters
+        maxIter         100;
+    }
+
+    p_rghFinal
+    {
+        $p_rgh;
+        relTol          0;              // Tight for final corrector
+        tolerance       1e-8;
+    }
+
+    // Pressure correction field (used during non-orthogonal correctors)
+    pcorr
+    {
+        $p_rgh;
+        tolerance       1e-5;
+        relTol          0;
+    }
+
+    "(U|h|e|T|k|epsilon|omega)"
+    {
+        solver          PBiCGStab;
+        preconditioner  DILU;
+        tolerance       1e-7;
+        relTol          0.1;
+    }
+
+    "(U|h|e|T|k|epsilon|omega)Final"
+    {
+        $U;
+        relTol          0;
+        tolerance       1e-8;
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PIMPLE ALGORITHM SETTINGS
+//
+// PIMPLE = outer SIMPLE-like correctors + inner PISO pressure correctors.
+//
+// nOuterCorrectors = 3:
+//   Outer (momentum + pressure) loops per time step.
+//   3 correctors give good momentum-pressure coupling convergence.
+//   At CFL < 1 for this low-Re laminar flow, 2-3 outer correctors
+//   are sufficient. More than 5 rarely improves results.
+//
+// nCorrectors = 2:
+//   Inner PISO pressure-velocity corrector iterations.
+//   2 is standard for transient incompressible; provides divergence-free
+//   velocity field at each outer iteration.
+//
+// nNonOrthogonalCorrectors = 2:
+//   Non-orthogonality corrections for the Laplacian in the pressure eq.
+//   The blockMesh hex mesh has moderate non-orthogonality at cylinder
+//   corners; 2 correctors handle this adequately.
+//
+// momentumPredictor = yes:
+//   Solve momentum before pressure correction.
+//   Recommended for flows with significant body forces (buoyancy).
+//
+// pRefCell / pRefValue:
+//   Required for pressure uniqueness with no Dirichlet p_rgh BC on
+//   closed domain. Cell 0 pinned to zero; consistent with outlet BC.
+// ─────────────────────────────────────────────────────────────────────────────
+
+PIMPLE
+{
+    nOuterCorrectors        3;
+    nCorrectors             2;
+    nNonOrthogonalCorrectors 2;
+    momentumPredictor       yes;
+    pRefCell                0;
+    pRefValue               0;
+
+    // Convergence override per outer corrector:
+    // If residuals drop below these thresholds mid-PIMPLE, exit early.
+    // Prevents unnecessary iterations when flow is nearly periodic.
+    residualControl
+    {
+        p_rgh
+        {
+            relTol          0;
+            tolerance       1e-5;
+        }
+        U
+        {
+            relTol          0;
+            tolerance       1e-5;
+        }
+        T
+        {
+            relTol          0;
+            tolerance       1e-5;
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// RELAXATION FACTORS
+//
+// For transient PIMPLE, relaxation is applied to the OUTER corrector loop,
+// not across time steps (unlike SIMPLE). Values of 0.7-0.9 are appropriate.
+//
+// IMPORTANT: Setting relaxation too low (< 0.5) damps the outer-corrector
+// convergence and can cause artificial smearing of the shedding cycle.
+// The values below are validated for this Re=100 buoyant configuration.
+// ─────────────────────────────────────────────────────────────────────────────
+
+relaxationFactors
+{
+    fields
+    {
+        p_rgh           0.7;            // Raised from 0.3 (SIMPLE) — PIMPLE is
+                                        // more stable with higher p relaxation
+        rho             1.0;
+    }
+
+    equations
+    {
+        U               0.9;            // Near-unity for transient (PIMPLE default)
+        h               0.8;
+        T               0.8;
+        e               0.8;
+    }
+}
+
+// ************************************************************************* //

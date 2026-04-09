@@ -1,0 +1,192 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+  =========                 |
+  \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox
+   \\    /   O peration     | Version:  v2306
+    \\  /    A nd           | Web:      www.OpenFOAM.com
+     \\/     M anipulation  |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "system";
+    object      controlDict;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SOLVER: buoyantPimpleFoam
+//   Transient incompressible flow with buoyancy (p_rgh formulation).
+//   PIMPLE = PISO + SIMPLE outer-corrector loop.
+//   Replaces buoyantSimpleFoam for time-accurate vortex-shedding capture.
+// ─────────────────────────────────────────────────────────────────────────────
+
+application     buoyantPimpleFoam;
+
+startFrom       latestTime;         // Restart from converged steady solution
+
+startTime       0;
+
+stopAt          endTime;
+
+// Physics: T_shed = D/(St*U_inf) = 1.0/(0.154*1.6e-3) ≈ 4054 s
+// Run for 10 shedding cycles = 40,540 s
+// Allow 3 spin-up cycles then capture 7 clean cycles for FFT
+endTime         40540;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ADAPTIVE TIME-STEPPING
+//   maxCo ≤ 1.0 for PIMPLE stability and temporal accuracy.
+//   Initial deltaT conservative; adjustableRunTime widens automatically.
+//   With min cell ≈ 0.02 m and U_inf = 1.6e-3 m/s:
+//     deltaT_max_CFL1 = 0.02 / 1.6e-3 ≈ 12.5 s
+//   Using maxDeltaT = 5 s for safety (CFL < 0.4 in freestream).
+// ─────────────────────────────────────────────────────────────────────────────
+
+deltaT          0.5;                // Initial time step [s]
+
+adjustTimeStep  yes;
+maxCo           0.8;                // CFL target (≤1.0 enforced)
+maxDeltaT       5.0;                // Hard upper bound [s]
+minDeltaT       0.01;               // Lower bound to prevent stagnation
+
+writeControl    adjustableRunTime;
+writeInterval   101.35;             // Approx 40 writes per shedding period
+
+purgeWrite      0;                  // Keep all time directories
+
+writeFormat     ascii;
+writePrecision  8;
+writeCompression off;
+timeFormat      general;
+timePrecision   8;
+runTimeModifiable true;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FUNCTION OBJECTS
+// ─────────────────────────────────────────────────────────────────────────────
+
+functions
+{
+    // ── Force Coefficients: Cl(t) and Cd(t) ──────────────────────────────
+    // Reference quantities:
+    //   rhoInf = 1.164 kg/m³  (air at 30°C)
+    //   U_inf  = 1.6e-3 m/s   (inlet velocity for Re=100)
+    //   lRef   = D = 1.0 m    (cylinder side length)
+    //   Aref   = D * dz = 1.0 * 0.01 = 0.01 m²  (spanwise reference area)
+    //
+    // Cl = Fy / (0.5 * rhoInf * U_inf^2 * Aref)
+    // Cd = Fx / (0.5 * rhoInf * U_inf^2 * Aref)
+    // ─────────────────────────────────────────────────────────────────────
+
+    forceCoeffs
+    {
+        type            forceCoeffs;
+        libs            (forces);
+
+        // Write at every time step for full time resolution of Cl(t)
+        writeControl    timeStep;
+        writeInterval   1;
+
+        patches         (cylinder);
+
+        rho             rhoInf;
+        rhoInf          1.164;          // Air density [kg/m³]
+
+        liftDir         (0 1 0);        // y-direction: lift
+        dragDir         (1 0 0);        // x-direction: drag
+
+        CofR            (5.5 0 0.005);  // Cylinder centroid
+                                        // x: 5D upstream + 0.5D = 5.5 m
+                                        // z: mid-plane = 0.005 m
+        pitchAxis       (0 0 1);
+
+        magUInf         1.6e-3;         // Reference velocity [m/s]
+        lRef            1.0;            // Reference length D [m]
+        Aref            0.01;           // Reference area D*dz [m²]
+    }
+
+    // ── Raw Forces: Fx(t), Fy(t), Mz(t) ─────────────────────────────────
+    forces
+    {
+        type            forces;
+        libs            (forces);
+        writeControl    timeStep;
+        writeInterval   1;
+
+        patches         (cylinder);
+
+        rho             rhoInf;
+        rhoInf          1.164;
+        CofR            (5.5 0 0.005);
+        pitchAxis       (0 0 1);
+    }
+
+    // ── Field Sampling: Velocity and Temperature Probe Signals ───────────
+    // Monitor point in the near-wake at x = 1.5D downstream of cylinder
+    // (absolute x = 5 + 1 + 1.5 = 7.5 m), y = 0 (centreline)
+    probes
+    {
+        type            probes;
+        libs            (sampling);
+        writeControl    timeStep;
+        writeInterval   1;
+
+        probeLocations
+        (
+            (7.5  0.0  0.005)   // Near-wake centreline: 1.5D behind cylinder
+            (8.5  0.5  0.005)   // Off-centreline: captures alternating vortex
+            (8.5 -0.5  0.005)   // Symmetric counterpart for antisymmetry check
+            (12.5  0.0  0.005)  // Far wake: 6.5D behind cylinder
+        );
+
+        fields          (U T p_rgh);
+    }
+
+    // ── Residual Monitoring ───────────────────────────────────────────────
+    residuals
+    {
+        type            solverInfo;
+        libs            (utilityFunctionObjects);
+        fields          (U p_rgh T h);
+        writeResiduals  yes;
+        writeControl    timeStep;
+        writeInterval   10;
+    }
+
+    // ── Field Statistics: Time-mean fields after spin-up ─────────────────
+    // Activated after 3 shedding cycles (t = 12162 s) to compute
+    // time-averaged U, T, p_rgh for comparison with steady solution.
+    fieldAverage
+    {
+        type            fieldAverage;
+        libs            (fieldFunctionObjects);
+        writeControl    writeTime;
+        timeStart       12162;          // Start averaging after 3 shed periods
+
+        fields
+        (
+            U
+            {
+                mean        on;
+                prime2Mean  on;
+                base        time;
+            }
+            T
+            {
+                mean        on;
+                prime2Mean  off;
+                base        time;
+            }
+            p_rgh
+            {
+                mean        on;
+                prime2Mean  off;
+                base        time;
+            }
+        );
+    }
+}
+
+// ************************************************************************* //

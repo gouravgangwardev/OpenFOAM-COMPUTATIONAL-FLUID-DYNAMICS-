@@ -24,44 +24,43 @@
 ```
 CFD_Complete_Project/
 │
-├── README.md                          ← This file
+├── README.md                          
 │
-├── OpenFOAM_Case/                     ← Full runnable OpenFOAM case
-│   ├── Allrun                         ← Run script (serial or parallel)
+├── OpenFOAM_Case/                    
+│   ├── Allrun                         
 │   ├── 0/
-│   │   ├── U                          ← Velocity initial condition
-│   │   ├── T                          ← Temperature initial condition
-│   │   └── p_rgh                      ← Modified pressure IC
+│   │   ├── U                          
+│   │   ├── T                          
+│   │   └── p_rgh                      
 │   ├── system/
-│   │   ├── controlDict                ← Transient settings, adaptive dt, CFL
-│   │   ├── fvSchemes                  ← BDF2 time, linearUpwind spatial
-│   │   └── fvSolution                 ← PIMPLE loop, GAMG solver
+│   │   ├── controlDict                
+│   │   ├── fvSchemes                  
+│   │   └── fvSolution                 
 │   └── constant/
-│       ├── thermophysicalProperties   ← Air at 30°C
-│       ├── turbulenceProperties       ← Laminar model
-│       ├── g                          ← Gravity vector
+│       ├── thermophysicalProperties   
+│       ├── turbulenceProperties       
+│       ├── g                          
 │       └── polyMesh/
-│           └── blockMeshDict          ← Structured hex mesh definition
+│           └── blockMeshDict          
 │
 ├── Python_Scripts/
-│   └── post_process_shedding.py       ← FFT analysis: St, Cl/Cd, plots, CSV
+│   └── post_process_shedding.py       
 │
-├── Charts/                            ← Publication-quality figures (180 dpi PNG)
-│   ├── fig1_Cl.png                    ← Lift coefficient time history
-│   ├── fig2_Cd.png                    ← Drag coefficient time history
-│   ├── fig3_FFT.png                   ← FFT power spectrum → St = 0.154
-│   ├── fig4_phase.png                 ← Phase portrait (figure-8 Lissajous)
-│   ├── fig5_Nu.png                    ← Nusselt number: steady vs transient
-│   └── fig6_Ri.png                    ← Richardson number regime classification
+├── Charts/                           
+│   ├── fig1_Cl.png                    
+│   ├── fig2_Cd.png                    
+│   ├── fig3_FFT.png                   
+│   ├── fig4_phase.png                 
+│   ├── fig5_Nu.png                    
+│   └── fig6_Ri.png                    
 │
 ├── Reports/
-│   ├── CFD_Report_WithCharts.docx     ← Full report with embedded charts
-│   └── CFD_Final_Report_SubmissionReady.docx ← Full report (text + tables)
+│   └── CFD_Final_Report.docx 
 │
-└── JavaScript_Builders/               ← Source code to regenerate reports
-    ├── build_report.js                ← Initial report builder
-    ├── build_final_report.js          ← Full 14-section report
-    └── build_report_with_charts.js    ← Report with embedded PNG charts
+└── JavaScript_Builders/             
+    ├── build_report.js                
+    ├── build_final_report.js          
+    └── build_report_with_charts.js    
 ```
 
 ---

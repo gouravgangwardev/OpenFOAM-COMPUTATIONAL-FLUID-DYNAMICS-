@@ -1,0 +1,93 @@
+/*--------------------------------*- C++ -*----------------------------------*\
+  =========                 |
+  \\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox
+   \\    /   O peration     | Version:  v2306
+    \\  /    A nd           | Web:      www.OpenFOAM.com
+     \\/     M anipulation  |
+\*---------------------------------------------------------------------------*/
+FoamFile
+{
+    version     2.0;
+    format      ascii;
+    class       dictionary;
+    location    "system";
+    object      fvSchemes;
+}
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TRANSIENT NUMERICAL SCHEMES — buoyantPimpleFoam
+//
+// Key upgrade from steady case:
+//   ddtSchemes: steadyState → backward
+//     "backward" is a 2nd-order implicit three-time-level scheme.
+//     It suppresses numerical dissipation of the temporal derivative,
+//     essential for resolving the periodic Cl(t) signal at low amplitude.
+//     "Euler" (1st-order) would smear the shedding oscillation.
+//
+// Spatial schemes remain 2nd-order (linearUpwind) as in the steady case.
+// These are compatible with PIMPLE and produce no additional dissipation
+// that would damp vortex structures prematurely.
+// ─────────────────────────────────────────────────────────────────────────────
+
+ddtSchemes
+{
+    // Second-order backward (3-level BDF2) time discretisation.
+    // Requires two previous time levels; automatically handled by PIMPLE.
+    // Formal temporal accuracy: O(Δt²).
+    default         backward;
+}
+
+gradSchemes
+{
+    default         Gauss linear;
+    grad(U)         Gauss linear;
+    grad(T)         Gauss linear;
+    grad(h)         Gauss linear;
+    grad(p_rgh)     Gauss linear;
+}
+
+divSchemes
+{
+    default         none;
+
+    // linearUpwind: 2nd-order upwind-biased, bounded.
+    // Appropriate for low-Re laminar flow where Peclet numbers are moderate.
+    // Provides less numerical diffusion than plain upwind while remaining
+    // stable without limiters on this structured hex mesh.
+    div(phi,U)      Gauss linearUpwind grad(U);
+    div(phi,h)      Gauss linearUpwind grad(h);
+    div(phi,K)      Gauss linearUpwind default;
+    div(phi,T)      Gauss linearUpwind grad(T);
+    div(phi,e)      Gauss linearUpwind default;
+
+    // Viscous stress tensor: always central (linear) for stress divergence
+    div(((rho*nuEff)*dev2(T(grad(U))))) Gauss linear;
+}
+
+laplacianSchemes
+{
+    // Gauss linear corrected: 2nd-order with non-orthogonality correction.
+    // "corrected" handles the structured but non-trivial mesh topology
+    // around the cylinder corners.
+    default         Gauss linear corrected;
+}
+
+interpolationSchemes
+{
+    default         linear;
+}
+
+snGradSchemes
+{
+    default         corrected;
+}
+
+fluxRequired
+{
+    default         no;
+    p_rgh           yes;
+    pcorr           yes;
+}
+
+// ************************************************************************* //
